@@ -39,7 +39,7 @@ jobs:
             --region ${{ inputs.aws_region }} \
             --kubernetes-version 1.35 \
             --role-arn arn:aws:iam::637423638685:role/c207582a5277984l14738340t1w637423-LabEksClusterRole-Aj3LY78H20ZR \
-            --resources-vpc-config subnetIds=subnet-038977691373e98ed,subnet-0d91d416deb27fd22,subnet-091dd4d3fb08cf8f9,subnet-0b84756f40d9180f7,subnet-0c6d8987c3fdaa976,securityGroupIds=sg-0971b70285c9edc46
+            --resources-vpc-config subnetIds=subnet-038977691373e98ed,subnet-0d91d416deb27fd22,subnet-091dd4d3fb08cf8f9,subnet-0b84756f40d9180f7,subnet-0c6d8987c3fdaa976,securityGroupIds=sg-03287be7b1050af3d
 
       - name: Esperar cluster activo
         run: |

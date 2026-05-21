@@ -10,7 +10,7 @@ variable "vpc_octet" {
 
 variable "ami_id" {
   description = "AMI de Ubuntu para EC2"
-  default     = "ami-0c55b159cbfafe1f0" # Ubuntu 20.04 en us-east-1
+  default     = "ami-053b0d53c279acc90" # Ubuntu 20.04 en us-east-1
 }
 
 variable "instance_type" {

@@ -1,12 +1,29 @@
 variable "aws_region" {
-  default = "us-east-1"
+  description = "Región AWS"
+  default     = "us-east-1"
 }
+
 variable "vpc_octet" {
-  default = "42"
+  description = "Octeto para la VPC"
+  default     = "42"
 }
+
+variable "ami_id" {
+  description = "AMI de Ubuntu para EC2"
+  default     = "ami-0c55b159cbfafe1f0" # Ubuntu 20.04 en us-east-1
+}
+
+variable "instance_type" {
+  description = "Tipo de instancia EC2"
+  default     = "t3.medium"
+}
+
 variable "db_user" {
-  default = "admin"
+  description = "Usuario administrador de RDS"
+  default     = "admin"
 }
+
 variable "db_password" {
-  default = "changeme123"
+  description = "Contraseña de RDS"
+  default     = "clave123"
 }

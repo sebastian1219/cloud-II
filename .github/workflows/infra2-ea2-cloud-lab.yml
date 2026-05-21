@@ -1,43 +1,94 @@
-name: INFRA2 - EA2 cloud lab (local)
+name: INFRA2 - Base Completa
 
 on:
   workflow_dispatch:
-    inputs:
-      aws_region:
-        description: Región AWS
-        required: true
-        default: us-east-1
-      instance_type:
-        description: Tipo EC2 por nodo k3s
-        required: true
-        default: t3.medium
-      vpc_octet:
-        description: Octeto X en 10.X.0.0/16 (1-254)
-        required: true
-        default: "42"
 
 jobs:
-  provision:
+  infra-base:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
+      - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ inputs.aws_region }}
+          aws-region: us-east-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+      # 1. Crear VPC base
+      - name: Crear VPC
+        run: |
+          aws ec2 create-vpc --cidr-block 10.0.0.0/16 --region us-east-1
 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ./terraform
+      # 2. Crear cluster EKS
+      - name: Crear cluster EKS
+        run: |
+          aws eks create-cluster \
+            --name cluster-sebastian-vargas \
+            --region us-east-1 \
+            --kubernetes-version 1.35 \
+            --role-arn arn:aws:iam::637423638685:role/c207582a5277984l14738340t1w637423-LabEksClusterRole-Aj3LY78H20ZR \
+            --resources-vpc-config subnetIds=subnet-038977691373e98ed,subnet-0d91d416deb27fd22,subnet-091dd4d3fb08cf8f9,subnet-0b84756f40d9180f7,subnet-0c6d8987c3fdaa976,securityGroupIds=sg-03287be7b1050af3d
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-        working-directory: ./terraform
+      - name: Esperar cluster activo
+        run: aws eks wait cluster-active --name cluster-sebastian-vargas
+
+      # 3. Crear Node Group (VM-A master, VM-B worker)
+      - name: Crear Node Group
+        run: |
+          aws eks create-nodegroup \
+            --cluster-name cluster-sebastian-vargas \
+            --nodegroup-name ng-vargas \
+            --subnets subnet-038977691373e98ed subnet-0d91d416deb27fd22 subnet-091dd4d3fb08cf8f9 subnet-0b84756f40d9180f7 subnet-0c6d8987c3fdaa976 \
+            --node-role arn:aws:iam::637423638685:role/c207582a5277984l14738340t1w637423638-LabEksNodeRole-GE5BQEqXA2iW \
+            --instance-types t3.medium \
+            --scaling-config minSize=2,maxSize=2,desiredSize=2
+
+      # 4. Crear Target Group y NLB
+      - name: Crear Target Group
+        run: |
+          aws elbv2 create-target-group \
+            --name tg-vargas \
+            --protocol TCP \
+            --port 30080 \
+            --vpc-id vpc-0e982f259fb5d6cd5 \
+            --target-type instance
+
+      - name: Crear NLB
+        run: |
+          aws elbv2 create-load-balancer \
+            --name nlb-vargas \
+            --type network \
+            --subnets subnet-038977691373e98ed subnet-0d91d416deb27fd22 subnet-091dd4d3fb08cf8f9 subnet-0b84756f40d9180f7 subnet-0c6d8987c3fdaa976
+
+      - name: Asociar Listener
+        run: |
+          LB_ARN=$(aws elbv2 describe-load-balancers --names nlb-vargas --query "LoadBalancers[0].LoadBalancerArn" --output text)
+          TG_ARN=$(aws elbv2 describe-target-groups --names tg-vargas --query "TargetGroups[0].TargetGroupArn" --output text)
+          aws elbv2 create-listener \
+            --load-balancer-arn $LB_ARN \
+            --protocol TCP \
+            --port 30080 \
+            --default-actions Type=forward,TargetGroupArn=$TG_ARN
+
+      # 5. Crear RDS MySQL con réplica
+      - name: Crear RDS MySQL
+        run: |
+          aws rds create-db-instance \
+            --db-instance-identifier rds-vargas \
+            --db-instance-class db.t3.micro \
+            --engine mysql \
+            --master-username admin \
+            --master-user-password SuperSecret123 \
+            --allocated-storage 20 \
+            --vpc-security-group-ids sg-03287be7b1050af3d \
+            --db-subnet-group-name default-vpc-0e982f259fb5d6cd5
+
+          aws rds create-db-instance-read-replica \
+            --db-instance-identifier rds-vargas-replica \
+            --source-db-instance-identifier rds-vargas
+
+      # 6. Crear bucket S3 para Terraform state
+      - name: Crear bucket S3
+        run: |
+          aws s3 mb s3://terraform-vargas-state --region us-east-1

@@ -1,0 +1,60 @@
+name: INFRA2 - Crear Cluster EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: Región AWS
+        required: true
+        default: us-east-1
+      cluster_name:
+        description: Nombre del cluster
+        required: true
+        default: cluster-sebastian-vargas
+      nodegroup_name:
+        description: Nombre del Node Group
+        required: true
+        default: ng-vargas
+      instance_type:
+        description: Tipo de instancia EC2
+        required: true
+        default: t3.medium
+
+jobs:
+  create-cluster:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Crear cluster EKS
+        run: |
+          aws eks create-cluster \
+            --name ${{ inputs.cluster_name }} \
+            --region ${{ inputs.aws_region }} \
+            --kubernetes-version 1.35 \
+            --role-arn arn:aws:iam::637423638685:role/c207582a5277984l14738340t1w637423-LabEksClusterRole-Aj3LY78H20ZR \
+            --resources-vpc-config subnetIds=subnet-038977691373e98ed,subnet-0d91d416deb27fd22,subnet-091dd4d3fb08cf8f9,subnet-0b84756f40d9180f7,subnet-0c6d8987c3fdaa976,securityGroupIds=sg-0971b70285c9edc46
+
+      - name: Esperar cluster activo
+        run: |
+          aws eks wait cluster-active --name ${{ inputs.cluster_name }}
+
+      - name: Crear Node Group
+        run: |
+          aws eks create-nodegroup \
+            --cluster-name ${{ inputs.cluster_name }} \
+            --nodegroup-name ${{ inputs.nodegroup_name }} \
+            --subnets subnet-038977691373e98ed subnet-0d91d416deb27fd22 subnet-091dd4d3fb08cf8f9 subnet-0b84756f40d9180f7 subnet-0c6d8987c3fdaa976 \
+            --node-role arn:aws:iam::637423638685:role/c207582a5277984l14738340t1w637423638-LabEksNodeRole-GE5BQEqXA2iW \
+            --instance-types ${{ inputs.instance_type }}
+
+      - name: Validar nodos en cluster
+        run: |
+          aws eks update-kubeconfig --region ${{ inputs.aws_region }} --name ${{ inputs.cluster_name }}
+          kubectl get nodes

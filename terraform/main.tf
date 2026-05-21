@@ -11,7 +11,7 @@ resource "aws_db_instance" "lab_rds" {
   engine               = "mysql"
   engine_version       = "8.0"
   instance_class       = "db.t3.micro"
-  name                 = "labdb"
+  db_name                = "labdb"
   username             = var.db_user
   password             = var.db_password
   skip_final_snapshot  = true

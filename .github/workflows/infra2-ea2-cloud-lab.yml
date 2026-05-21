@@ -1,5 +1,4 @@
-name: INFRA2 - EA2 cloud lab (delegado EA2) (remoto)
-description: Dispara el workflow de provisionamiento de un laboratorio cloud en AWS con VPC, 2x k3s, NLB TCP, RDS, Docker Hub y manifiestos.
+name: INFRA2 - EA2 cloud lab (local)
 
 on:
   workflow_dispatch:
@@ -7,31 +6,38 @@ on:
       aws_region:
         description: Región AWS
         required: true
-        type: string
         default: us-east-1
       instance_type:
         description: Tipo EC2 por nodo k3s
         required: true
-        type: string
         default: t3.medium
       vpc_octet:
         description: Octeto X en 10.X.0.0/16 (1-254)
         required: true
-        type: string
         default: "42"
 
 jobs:
-  delegar:
-    uses: asanchezo-duoc/AUY1104-SharedWorkflows/.github/workflows/infra2-ea2-provision-cloud-lab.yaml@EA2
-    with:
-      aws_region: ${{ inputs.aws_region }}
-      instance_type: ${{ inputs.instance_type }}
-      vpc_octet: ${{ inputs.vpc_octet }}
-      s3_status_bucket: ${{ vars.EA2_S3_BUCKET }}
-    secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      EA2_SSH_PRIVATE_KEY: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ./terraform

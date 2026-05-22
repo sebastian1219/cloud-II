@@ -25,25 +25,26 @@ jobs:
           EXISTS=$(kubectl get daemonset -n amazon-cloudwatch cwagent 2>/dev/null || echo "None")
           if [ "$EXISTS" == "None" ]; then
             kubectl apply -f https://raw.githubusercontent.com/aws/amazon-cloudwatch-agent-k8s/master/deployment.yaml
-            kubectl apply -f - <<EOF
-            apiVersion: v1
-            kind: ConfigMap
-            metadata:
-              name: cwagentconfig
-              namespace: amazon-cloudwatch
-            data:
-              cwagentconfig.json: |
-                {
-                  "metrics": {
-                    "namespace": "TechNova/Infra",
-                    "metrics_collected": {
-                      "cpu": { "measurement": ["usage_user"] },
-                      "mem": { "measurement": ["mem_used_percent"] },
-                      "disk": { "measurement": ["disk_used_percent"], "resources": ["*"] }
-                    }
-                  }
-                }
-            EOF
+
+            cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cwagentconfig
+  namespace: amazon-cloudwatch
+data:
+  cwagentconfig.json: |
+    {
+      "metrics": {
+        "namespace": "TechNova/Infra",
+        "metrics_collected": {
+          "cpu": { "measurement": ["usage_user"] },
+          "mem": { "measurement": ["mem_used_percent"] },
+          "disk": { "measurement": ["disk_used_percent"], "resources": ["*"] }
+        }
+      }
+    }
+EOF
           fi
 
       # R1 - Dashboard CloudWatch (skip si ya existe)
@@ -74,7 +75,6 @@ jobs:
             aws sns subscribe --topic-arn $TOPIC_ARN --protocol email --notification-endpoint juan@example.com
           fi
 
-          # Alarmas (solo crear si no existen)
           for ALARM in CPU-VM-A-High Mem-VM-A-High CPU-RDS-High Conn-RDS-High; do
             EXISTS=$(aws cloudwatch describe-alarms --alarm-names $ALARM --query "MetricAlarms[0].AlarmName" --output text 2>/dev/null || echo "None")
             if [ "$EXISTS" == "None" ]; then

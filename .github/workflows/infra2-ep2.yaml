@@ -24,6 +24,7 @@ jobs:
         run: |
           EXISTS=$(kubectl get daemonset -n amazon-cloudwatch cwagent 2>/dev/null || echo "None")
           if [ "$EXISTS" == "None" ]; then
+            kubectl create namespace amazon-cloudwatch || true
             kubectl apply -f https://raw.githubusercontent.com/aws/amazon-cloudwatch-agent-k8s/master/deployment.yaml
 
             cat <<EOF | kubectl apply -f -

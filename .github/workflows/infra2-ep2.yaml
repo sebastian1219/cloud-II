@@ -27,7 +27,7 @@ jobs:
             kubectl create namespace amazon-cloudwatch || true
             kubectl apply -f https://raw.githubusercontent.com/aws/amazon-cloudwatch-agent-k8s/master/deployment.yaml
 
-            cat <<EOF | kubectl apply -f -
+            echo '
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -45,7 +45,9 @@ data:
         }
       }
     }
-EOF
+' > cwagent-config.yaml
+
+            kubectl apply -f cwagent-config.yaml
           fi
 
       # R1 - CloudWatch Dashboard (skip if exists)
@@ -66,7 +68,6 @@ EOF
                 ]
               }'
           fi
-
 
       # R2 - SNS Topic and Alarms (skip if exist)
       - name: Create SNS Topic and Alarms

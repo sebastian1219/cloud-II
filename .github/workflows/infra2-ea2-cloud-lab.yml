@@ -67,6 +67,17 @@ jobs:
           fi
           aws eks wait cluster-active --name cluster-sebastian-vargas
 
+
+      # Crear Key Pair (si no existe)
+      - name: Crear Key Pair
+        run: |
+          EXISTS=$(aws ec2 describe-key-pairs --key-names eks-vargas-key --query "KeyPairs[0].KeyName" --output text 2>/dev/null || echo "None")
+          if [ "$EXISTS" == "None" ]; then
+            aws ec2 create-key-pair --key-name eks-vargas-key --query "KeyMaterial" --output text > eks-vargas-key.pem
+            chmod 400 eks-vargas-key.pem
+          fi
+
+
       # 5. Crear Node Group (si no existe)
       - name: Crear Node Group
         run: |

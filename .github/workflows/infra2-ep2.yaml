@@ -1,0 +1,83 @@
+name: INFRA2 - EP2 Evaluación
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ep2-evaluacion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      # R1 - Monitoreo CloudWatch Agent
+      - name: Instalar CloudWatch Agent en VM-A y VM-B
+        run: |
+          aws ssm send-command \
+            --targets "Key=instanceIds,Values=i-VM-A,i-VM-B" \
+            --document-name "AmazonCloudWatch-ManageAgent" \
+            --comment "Instalar CloudWatch Agent" \
+            --parameters '{"action":["install"],"mode":["ec2"],"optionalConfigurationSource":["ssm"]}'
+
+      - name: Configurar CloudWatch Agent
+        run: |
+          aws ssm send-command \
+            --targets "Key=instanceIds,Values=i-VM-A,i-VM-B" \
+            --document-name "AmazonCloudWatch-ManageAgent" \
+            --comment "Configurar métricas personalizadas" \
+            --parameters '{"action":["configure"],"mode":["ec2"],"optionalConfigurationSource":["ssm"],"optionalConfigurationLocation":["AmazonCloudWatch-linux.json"]}'
+
+      - name: Crear Dashboard CloudWatch
+        run: |
+          aws cloudwatch put-dashboard \
+            --dashboard-name dashboard-vargas \
+            --dashboard-body '{
+              "widgets":[
+                {"type":"metric","properties":{"metrics":[["TechNova/Infra","cpu_usage_user","InstanceId","i-VM-A"]],"title":"CPU VM-A"}},
+                {"type":"metric","properties":{"metrics":[["TechNova/Infra","cpu_usage_user","InstanceId","i-VM-B"]],"title":"CPU VM-B"}},
+                {"type":"metric","properties":{"metrics":[["TechNova/Infra","mem_used_percent","InstanceId","i-VM-A"]],"title":"Memoria VM-A"}},
+                {"type":"metric","properties":{"metrics":[["TechNova/Infra","mem_used_percent","InstanceId","i-VM-B"]],"title":"Memoria VM-B"}},
+                {"type":"metric","properties":{"metrics":[["AWS/RDS","CPUUtilization","DBInstanceIdentifier","rds-vargas"]],"title":"CPU RDS"}},
+                {"type":"metric","properties":{"metrics":[["AWS/RDS","DatabaseConnections","DBInstanceIdentifier","rds-vargas"]],"title":"Conexiones RDS"}}
+              ]
+            }'
+
+      # R2 - Alarmas y SNS
+      - name: Crear Topic SNS
+        run: |
+          aws sns create-topic --name alertas-infra-vargas
+          aws sns subscribe --topic-arn arn:aws:sns:us-east-1:637423638685:alertas-infra-vargas --protocol email --notification-endpoint juan@example.com
+
+      - name: Crear Alarmas CloudWatch
+        run: |
+          aws cloudwatch put-metric-alarm --alarm-name CPU-VM-A-High --metric-name cpu_usage_user --namespace TechNova/Infra --statistic Average --period 60 --threshold 70 --comparison-operator GreaterThanThreshold --dimensions Name=InstanceId,Value=i-VM-A --evaluation-periods 1 --alarm-actions arn:aws:sns:us-east-1:637423638685:alertas-infra-vargas
+          aws cloudwatch put-metric-alarm --alarm-name Mem-VM-A-High --metric-name mem_used_percent --namespace TechNova/Infra --statistic Average --period 60 --threshold 75 --comparison-operator GreaterThanThreshold --dimensions Name=InstanceId,Value=i-VM-A --evaluation-periods 1 --alarm-actions arn:aws:sns:us-east-1:637423638685:alertas-infra-vargas
+          aws cloudwatch put-metric-alarm --alarm-name CPU-RDS-High --metric-name CPUUtilization --namespace AWS/RDS --statistic Average --period 60 --threshold 80 --comparison-operator GreaterThanThreshold --dimensions Name=DBInstanceIdentifier,Value=rds-vargas --evaluation-periods 1 --alarm-actions arn:aws:sns:us-east-1:637423638685:alertas-infra-vargas
+          aws cloudwatch put-metric-alarm --alarm-name Conn-RDS-High --metric-name DatabaseConnections --namespace AWS/RDS --statistic Average --period 60 --threshold 50 --comparison-operator GreaterThanThreshold --dimensions Name=DBInstanceIdentifier,Value=rds-vargas --evaluation-periods 1 --alarm-actions arn:aws:sns:us-east-1:637423638685:alertas-infra-vargas
+
+      # R3 - Backup y Restore
+      - name: Crear Backup Plan
+        run: |
+          aws backup create-backup-plan --backup-plan '{
+            "BackupPlanName":"backup-diario-vargas",
+            "Rules":[{"RuleName":"diario","TargetBackupVaultName":"Default","ScheduleExpression":"cron(0 12 * * ? *)","Lifecycle":{"DeleteAfterDays":7}}]
+          }'
+
+          aws backup create-backup-selection --backup-plan-id <PLAN_ID> --backup-selection '{
+            "SelectionName":"infra-vargas",
+            "Resources":["arn:aws:ec2:us-east-1:637423638685:instance/i-VM-A","arn:aws:ec2:us-east-1:637423638685:instance/i-VM-B","arn:aws:rds:us-east-1:637423638685:db:rds-vargas"]
+          }'
+
+          aws backup start-backup-job --backup-vault-name Default --resource-arn arn:aws:rds:us-east-1:637423638685:db:rds-vargas --iam-role-arn arn:aws:iam::637423638685:role/AWSBackupDefaultServiceRole
+
+      # R4 - Validación réplica RDS
+      - name: Validar réplica RDS
+        run: |
+          aws rds describe-db-instances --db-instance-identifier rds-vargas
+          aws rds describe-db-instances --db-instance-identifier rds-vargas-replica
+          aws cloudwatch get-metric-data --metric-data-queries '[{"Id":"replicaLag","MetricStat":{"Metric":{"Namespace":"AWS/RDS","MetricName":"ReplicaLag","Dimensions":[{"Name":"DBInstanceIdentifier","Value":"rds-vargas-replica"}]},"Period":60,"Stat":"Average"}}]' --start-time $(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ)

@@ -1,0 +1,101 @@
+name: INFRA2 - Deploy Workloads
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-workloads:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Configurar kubeconfig
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name cluster-sebastian-vargas
+
+      # 1. Desplegar API ea2-cloud-lab
+      - name: Deploy API ea2-cloud-lab
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ea2-cloud-lab
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: ea2-cloud-lab
+            template:
+              metadata:
+                labels:
+                  app: ea2-cloud-lab
+              spec:
+                containers:
+                - name: api
+                  image: 637423638685.dkr.ecr.us-east-1.amazonaws.com/ea2-cloud-lab:latest
+                  ports:
+                  - containerPort: 8080
+                  env:
+                  - name: DB_HOST
+                    value: rds-vargas.c1234567890.us-east-1.rds.amazonaws.com
+                  - name: DB_USER
+                    value: admin
+                  - name: DB_PASS
+                    value: SuperSecret123
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ea2-cloud-lab-svc
+          spec:
+            type: LoadBalancer
+            ports:
+            - port: 30080
+              targetPort: 8080
+            selector:
+              app: ea2-cloud-lab
+          EOF
+
+      # 2. Desplegar Grafana
+      - name: Deploy Grafana
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: grafana
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: grafana
+            template:
+              metadata:
+                labels:
+                  app: grafana
+              spec:
+                containers:
+                - name: grafana
+                  image: grafana/grafana:latest
+                  ports:
+                  - containerPort: 3000
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: grafana-svc
+          spec:
+            type: LoadBalancer
+            ports:
+            - port: 30200
+              targetPort: 3000
+            selector:
+              app: grafana
+          EOF

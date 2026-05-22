@@ -27,8 +27,7 @@ jobs:
             kubectl create namespace amazon-cloudwatch || true
             kubectl apply -f https://raw.githubusercontent.com/aws/amazon-cloudwatch-agent-k8s/master/deployment.yaml
 
-            echo '
-apiVersion: v1
+            echo "apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cwagentconfig
@@ -36,16 +35,15 @@ metadata:
 data:
   cwagentconfig.json: |
     {
-      "metrics": {
-        "namespace": "TechNova/Infra",
-        "metrics_collected": {
-          "cpu": { "measurement": ["usage_user"] },
-          "mem": { "measurement": ["mem_used_percent"] },
-          "disk": { "measurement": ["disk_used_percent"], "resources": ["*"] }
+      \"metrics\": {
+        \"namespace\": \"TechNova/Infra\",
+        \"metrics_collected\": {
+          \"cpu\": { \"measurement\": [\"usage_user\"] },
+          \"mem\": { \"measurement\": [\"mem_used_percent\"] },
+          \"disk\": { \"measurement\": [\"disk_used_percent\"], \"resources\": [\"*\"] }
         }
       }
-    }
-' > cwagent-config.yaml
+    }" > cwagent-config.yaml
 
             kubectl apply -f cwagent-config.yaml
           fi

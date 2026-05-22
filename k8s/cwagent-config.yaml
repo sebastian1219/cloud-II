@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cwagentconfig
+  namespace: amazon-cloudwatch
+data:
+  cwagentconfig.json: |
+    {
+      "metrics": {
+        "namespace": "TechNova/Infra",
+        "metrics_collected": {
+          "cpu": {
+            "measurement": ["usage_user"]
+          },
+          "mem": {
+            "measurement": ["mem_used_percent"]
+          },
+          "disk": {
+            "measurement": ["disk_used_percent"],
+            "resources": ["*"]
+          }
+        }
+      }
+    }
